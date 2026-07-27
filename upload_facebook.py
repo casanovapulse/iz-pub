@@ -1,134 +1,80 @@
 """
-Facebook Reels Upload
-
-Facebook Graph API for uploading Reels to Facebook Page.
-Enhanced with comprehensive debugging and error handling.
+Facebook Reels Upload - VELOCITY HEBREW
 """
 
 import os
 import requests
 from pathlib import Path
+from dotenv import load_dotenv
 
-def upload_to_facebook(video_path, description):
-    """
-    Upload video to Facebook Page.
-    
-    Returns dict with upload status and details.
-    """
-    
+load_dotenv()
+
+def _post_pinned_comment(video_id, description, access_token, page_id):
+    import time
+    print(f"[facebook] Posting description as pinned comment...")
+    max_retries = 5
+    comment_id = None
+    for attempt in range(max_retries):
+        try:
+            comment_url = f"https://graph.facebook.com/v21.0/{video_id}/comments"
+            comment_data = {'access_token': access_token, 'message': description}
+            res_comment = requests.post(comment_url, data=comment_data, timeout=30)
+            if res_comment.status_code == 200:
+                resp = res_comment.json()
+                comment_id = resp.get('id')
+                if comment_id:
+                    print(f"[facebook] Comment posted! ID: {comment_id}")
+                    break
+            elif res_comment.status_code == 404 and attempt < max_retries - 1:
+                wait = (attempt + 1) * 10
+                time.sleep(wait)
+        except Exception as e:
+            print(f"[facebook] Comment post error: {e}")
+            break
+    if comment_id:
+        try:
+            pin_url = f"https://graph.facebook.com/v21.0/{comment_id}"
+            pin_data = {'access_token': access_token, 'is_pinned': 'true'}
+            requests.post(pin_url, data=pin_data, timeout=15)
+        except Exception as e:
+            print(f"[facebook] Pin error: {e}")
+
+def upload_to_facebook(video_path, description, title="VELOCITY HEBREW"):
     print("\n" + "=" * 60)
-    print("📘 FACEBOOK UPLOAD STARTING")
+    print("FACEBOOK UPLOAD")
     print("=" * 60)
-    
-    # Get credentials
-    access_token = os.getenv('FACEBOOK_ACCESS_TOKEN')
-    page_id = os.getenv('FACEBOOK_PAGE_ID')
-    
-    if not access_token:
-        error_msg = "❌ FB_ACCESS_TOKEN not set in environment variables"
-        print(f"[facebook] {error_msg}")
-        raise ValueError(error_msg)
-    
-    if not page_id:
-        error_msg = "❌ FB_PAGE_ID not set in environment variables"
-        print(f"[facebook] {error_msg}")
-        raise ValueError(error_msg)
-    
-    print(f"[facebook] ✅ Credentials loaded")
-    print(f"[facebook] Page ID: {page_id}")
-    print(f"[facebook] Token: {access_token[:20]}...")
-    
-    # Check video file
+    access_token = os.getenv('FACEBOOK_ACCESS_TOKEN') or os.getenv('FB_ACCESS_TOKEN')
+    page_id = os.getenv('FACEBOOK_PAGE_ID') or os.getenv('FB_PAGE_ID')
+    if not access_token: raise ValueError("FACEBOOK_ACCESS_TOKEN not set")
+    if not page_id: raise ValueError("FACEBOOK_PAGE_ID not set")
     video_path_obj = Path(video_path)
-    if not video_path_obj.exists():
-        error_msg = f"❌ Video file not found: {video_path}"
-        print(f"[facebook] {error_msg}")
-        raise FileNotFoundError(error_msg)
-    
-    file_size_mb = video_path_obj.stat().st_size / (1024 * 1024)
-    print(f"[facebook] ✅ Video file found: {video_path}")
-    print(f"[facebook] Video size: {file_size_mb:.2f} MB")
-    
-    # Upload video
-    print(f"[facebook] 🚀 Uploading to Facebook Page...")
-    url = f"https://graph.facebook.com/v24.0/{page_id}/videos"
-    
+    if not video_path_obj.exists(): raise FileNotFoundError(f"Video not found: {video_path}")
     try:
-        with open(video_path, 'rb') as video:
-            files = {'file': video}
-            data = {
-                'access_token': access_token,
-                'description': description[:500],  # Limit description length
-                'title': 'История древних женщин',
-                'is_explicit_share': True
-            }
-            
-            print(f"[facebook] Sending request to Facebook API...")
-            response = requests.post(url, files=files, data=data, timeout=300)
-            
-            # Check response
-            if response.status_code == 200:
-                result = response.json()
-                video_id = result.get('id')
-                
-                print(f"[facebook] ✅ SUCCESS! Video uploaded!")
-                print(f"[facebook] Video ID: {video_id}")
-                print(f"[facebook] Check your Facebook Page to see the post!")
-                print("=" * 60)
-                
-                return {
-                    'id': video_id,
-                    'platform': 'facebook',
-                    'status': 'success',
-                    'url': f"https://facebook.com/{video_id}"
-                }
-            else:
-                # Handle error response
-                error_data = response.json() if response.text else {}
-                error_msg = error_data.get('error', {}).get('message', 'Unknown error')
-                error_code = error_data.get('error', {}).get('code', 'N/A')
-                
-                print(f"[facebook] ❌ UPLOAD FAILED!")
-                print(f"[facebook] Status Code: {response.status_code}")
-                print(f"[facebook] Error Code: {error_code}")
-                print(f"[facebook] Error Message: {error_msg}")
-                print(f"[facebook] Full Response: {response.text[:500]}")
-                print("=" * 60)
-                
-                raise Exception(f"Facebook API Error {response.status_code}: {error_msg}")
-                
-    except requests.exceptions.Timeout:
-        error_msg = "⏱️ Upload timed out (video too large or slow connection)"
-        print(f"[facebook] ❌ {error_msg}")
-        print("=" * 60)
-        raise Exception(error_msg)
-        
-    except requests.exceptions.ConnectionError as e:
-        error_msg = f"🌐 Connection error: {str(e)}"
-        print(f"[facebook] ❌ {error_msg}")
-        print("=" * 60)
-        raise Exception(error_msg)
-        
-    except Exception as e:
-        print(f"[facebook] ❌ UNEXPECTED ERROR!")
-        print(f"[facebook] Error type: {type(e).__name__}")
-        print(f"[facebook] Error message: {str(e)}")
-        print("=" * 60)
-        raise
+        file_size = video_path_obj.stat().st_size
+        start_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
+        start_data = {'access_token': access_token, 'upload_phase': 'start', 'file_size': file_size}
+        res_start = requests.post(start_url, data=start_data, timeout=30)
+        if res_start.status_code != 200: raise Exception(f"Start failed: {res_start.text}")
+        start_json = res_start.json()
+        video_id = start_json.get('video_id')
+        upload_url = start_json.get('upload_url')
+        if not video_id: raise Exception(f"No video_id: {start_json}")
+        headers = {'Authorization': f'OAuth {access_token}', 'offset': '0', 'file_size': str(file_size)}
+        with open(video_path, 'rb') as f:
+            res_transfer = requests.post(upload_url, headers=headers, data=f, timeout=600)
+        if res_transfer.status_code != 200: raise Exception(f"Transfer failed: {res_transfer.text}")
+        finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
+        finish_data = {'access_token': access_token, 'upload_phase': 'finish', 'video_id': video_id, 'description': description, 'video_state': 'PUBLISHED'}
+        res_finish = requests.post(finish_url, data=finish_data, timeout=60)
+        if res_finish.status_code == 200 and res_finish.json().get('success'):
+            _post_pinned_comment(video_id, description, access_token, page_id)
+            return {'id': video_id, 'platform': 'facebook', 'status': 'success', 'url': f"https://facebook.com/{video_id}"}
+        else: raise Exception(f"Finish failed: {res_finish.text}")
+    except Exception as e: print(f"[facebook] ERROR: {e}"); raise
 
 if __name__ == '__main__':
-    # Test upload
-    from pathlib import Path
-    
-    video_file = Path('output/final_video.mp4')
+    video_file = Path('final_video.mp4')
     if video_file.exists():
-        story_file = Path('output/story.txt')
-        description = story_file.read_text(encoding='utf-8') if story_file.exists() else "Test upload"
-        
-        try:
-            result = upload_to_facebook(video_file, description)
-            print(f"\n✅ Test successful! Result: {result}")
-        except Exception as e:
-            print(f"\n❌ Test failed: {e}")
-    else:
-        print(f"❌ Video not found: {video_file}")
+        try: upload_to_facebook(str(video_file), "Test")
+        except Exception as e: print(f"Failed: {e}")
+
