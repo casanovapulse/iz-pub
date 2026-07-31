@@ -80,7 +80,7 @@ def generate_script():
                 "seed": current_seed
             }
 
-            response = requests.post(f"{BASE_URL}/v1/chat/completions", headers=headers, json=data)
+            response = requests.post(f"{BASE_URL}/v1/chat/completions", headers=headers, json=data, timeout=60)
             response.raise_for_status()
             script_data = response.json()['choices'][0]['message']['content']
 
