@@ -6,7 +6,75 @@ Uploads video to tmpfiles.org, then uses URL for Threads API
 import os
 import requests
 import time
+import shutil
+import subprocess
 from pathlib import Path
+
+GITHUB_REPO = "casanovapulse/iz-pub"
+GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/media/ielts_short.mp4"
+
+def host_video_on_github(video_path_obj):
+    """
+    Commit the video into the repo at media/ielts_short.mp4 and return its
+    raw.githubusercontent.com URL. Requires GH_TOKEN (a PAT) in the environment.
+    """
+    gh_token = os.getenv("GH_TOKEN") or os.getenv("GH_PAT")
+    if not gh_token:
+        raise ValueError("GH_TOKEN/GH_PAT not set for GitHub video hosting")
+
+    print(f"[threads] 📤 Step 1a: Hosting video on GitHub raw...")
+    media_dir = Path("media")
+    media_dir.mkdir(exist_ok=True)
+    dest = media_dir / "ielts_short.mp4"
+    shutil.copyfile(video_path_obj, dest)
+
+    env = dict(os.environ, GH_TOKEN=gh_token)
+    cmds = [
+        ["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"],
+        ["git", "config", "--global", "user.name", "github-actions[bot]"],
+        ["git", "add", "-f", "media/ielts_short.mp4"],
+    ]
+    for c in cmds:
+        subprocess.run(c, capture_output=True, env=env)
+
+    # Commit & push only if there is a change
+    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True, env=env)
+    if diff.returncode == 0:
+        print(f"[threads] ✅ Media unchanged on GitHub, reusing URL")
+    else:
+        subprocess.run(["git", "commit", "-m", "chore: update thread media [skip ci]"], capture_output=True, env=env)
+        subprocess.run(["git", "config", "http.extraHeader", f"AUTHORIZATION: bearer {gh_token}"], capture_output=True, env=env)
+        push = subprocess.run(["git", "push", "-f", "origin", "HEAD:main"], capture_output=True, env=env, text=True)
+        if push.returncode != 0:
+            raise ValueError(f"git push failed: {push.stderr[-300:]}")
+        subprocess.run(["git", "config", "--unset", "http.extraHeader"], capture_output=True, env=env)
+
+    print(f"[threads] ✅ GitHub URL: {GITHUB_RAW}")
+    return GITHUB_RAW
+
+def host_video_on_tmpfiles(video_path_obj):
+    """
+    Upload to tmpfiles.org and return a direct download URL (fallback host).
+    """
+    with open(video_path_obj, 'rb') as video_file:
+        files = {'file': ('video.mp4', video_file, 'video/mp4')}
+        temp_response = requests.post(
+            'https://tmpfiles.org/api/v1/upload',
+            files=files,
+            timeout=180
+        )
+
+    if temp_response.status_code != 200:
+        raise Exception(f"tmpfiles.org upload failed: {temp_response.status_code}")
+
+    temp_data = temp_response.json()
+    if temp_data.get('status') != 'success':
+        raise Exception(f"tmpfiles.org failed: {temp_data}")
+
+    temp_url = temp_data.get('data', {}).get('url', '')
+    video_url = temp_url.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://')
+    print(f"[threads] ✅ Temporary URL created: {video_url}")
+    return video_url
 
 def upload_to_threads(video_path, text):
     """
@@ -50,39 +118,22 @@ def upload_to_threads(video_path, text):
     text_limited = text[:500] if len(text) > 500 else text
     print(f"[threads] Text length: {len(text_limited)} characters")
     
+    video_url = None
+
+    # Step 1: Host the video on a reliable public URL.
+    # Preferred: commit it to the GitHub repo (raw.githubusercontent.com is
+    # reliable for Threads to fetch). Fallback: tmpfiles.org temporary host.
     try:
-        # Step 1: Upload to tmpfiles.org to get public URL
-        print(f"[threads] 📤 Step 1: Uploading to temporary hosting...")
-        
-        with open(video_path_obj, 'rb') as video_file:
-            files = {'file': ('video.mp4', video_file, 'video/mp4')}
-            temp_response = requests.post(
-                'https://tmpfiles.org/api/v1/upload',
-                files=files,
-                timeout=180
-            )
-        
-        if temp_response.status_code != 200:
-            error_msg = f"Failed to upload to temporary hosting: {temp_response.status_code}"
-            print(f"[threads] ❌ {error_msg}")
-            print(f"[threads] Response: {temp_response.text[:200]}")
-            raise Exception(error_msg)
-        
-        temp_data = temp_response.json()
-        if temp_data.get('status') != 'success':
-            error_msg = f"Temporary hosting failed: {temp_data}"
-            print(f"[threads] ❌ {error_msg}")
-            raise Exception(error_msg)
-        
-        # tmpfiles.org returns URL in format: https://tmpfiles.org/12345
-        # We need direct download link: https://tmpfiles.org/dl/12345
-        temp_url = temp_data.get('data', {}).get('url', '')
-        
-        # IMPORTANT: Threads might need HTTPS, not HTTP
-        video_url = temp_url.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://')
-        
-        print(f"[threads] ✅ Temporary URL created: {video_url}")
-        
+        video_url = host_video_on_github(video_path_obj)
+    except Exception as gh_err:
+        print(f"[threads] ⚠️ GitHub hosting failed: {gh_err}")
+        print(f"[threads] Falling back to tmpfiles.org...")
+        video_url = host_video_on_tmpfiles(video_path_obj)
+
+    if not video_url:
+        raise Exception("Failed to obtain a public video URL")
+
+    try:
         # Step 2: Create Threads container with video URL
         print(f"[threads] 📦 Step 2: Creating Threads container...")
         
