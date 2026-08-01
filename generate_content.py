@@ -58,12 +58,25 @@ def generate_script():
         "Content-Type": "application/json"
     }
 
-    FALLBACK_PHRASES = [
-        "To Pivot Strategically", "To Leverage Synergies", "To Navigate Ambiguity",
-        "To Cultivate Resilience", "To Articulate Vision", "To Operationalize Concepts",
-        "To Democratize Access", "To Contextualize Findings", "To Problematize Assumptions",
-        "To Synthesize Perspectives", "To Scrutinize Evidence", "To Substantiate Claims"
+    FALLBACK_VERBS = [
+        "Harmonize", "Obviate", "Perpetuate", "Eschew", "Articulate", "Operationalize",
+        "Democratize", "Contextualize", "Problematize", "Synthesize", "Scrutinize",
+        "Substantiate", "Mitigate", "Elucidate", "Expedite", "Corroborate", "Consolidate",
+        "Circumvent", "Reconcile", "Delineate", "Extrapolate", "Prioritize", "Facilitate",
+        "Ameliorate", "Enumerate", "Equivocate", "Bolster", "Undermine", "Pragmatize"
     ]
+    FALLBACK_NOUNS = [
+        "Dichotomies", "Synergies", "Ambiguity", "Resilience", "Vision", "Concepts",
+        "Access", "Findings", "Assumptions", "Perspectives", "Evidence", "Claims",
+        "Risks", "Nuances", "Paradigms", "Disparities", "Frameworks", "Constraints",
+        "Trade-offs", "Contradictions", "Caveats", "Incentives", "Boundaries", "Hegemony",
+        "Complexities", "Notions", "Pragmatism", "Trajectories", "Implications", "Tensions"
+    ]
+
+    def generate_fallback_phrase():
+        verb = random.choice(FALLBACK_VERBS)
+        noun = random.choice(FALLBACK_NOUNS)
+        return f"To {verb} {noun}"
 
     max_attempts = 5
     for attempt in range(max_attempts):
@@ -94,7 +107,7 @@ def generate_script():
                     print(f"Repeat topic '{display_title}', retrying...")
                     continue
                 else:
-                    fallback = random.choice(FALLBACK_PHRASES)
+                    fallback = generate_fallback_phrase()
                     print(f"Using fallback: {fallback}")
                     script_data["display_title"] = fallback
                     script_data["better_way"] = fallback

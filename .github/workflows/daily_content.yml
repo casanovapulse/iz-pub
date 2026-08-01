@@ -48,6 +48,23 @@ jobs:
         run: |
           python generate_content.py
 
+      - name: Commit Topic History (Memory)
+        if: always()
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f topic_history.txt ]; then
+            git add topic_history.txt
+            if git diff --cached --quiet; then
+              echo "No new topics to commit"
+            else
+              git commit -m "chore: update topic history memory [skip ci]"
+              git push origin HEAD:main
+            fi
+          else
+            echo "No topic_history.txt found"
+          fi
+
       - name: Assemble Video
         run: |
           python assemble_video.py
@@ -83,9 +100,3 @@ jobs:
           VK_GROUP_ID: ${{ secrets.VK_GROUP_ID }}
         run: |
           python publish_content.py
-
-      - name: Commit Topic History (Memory)
-        if: always()
-        continue-on-error: true
-        run: |
-          echo "Memory update step completed"
