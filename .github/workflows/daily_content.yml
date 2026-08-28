@@ -50,19 +50,19 @@ jobs:
 
       - name: Commit Topic History (Memory)
         if: always()
+        continue-on-error: true
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f topic_history.txt ]; then
-            git add topic_history.txt used_topics.txt published_videos.json
-            if git diff --cached --quiet; then
-              echo "No new topics to commit"
-            else
-              git commit -m "chore: update topic history memory [skip ci]"
-              git push origin HEAD:main
-            fi
+          for f in topic_history.txt used_topics.txt published_videos.json; do
+            if [ -f "$f" ]; then git add -f "$f"; fi
+          done
+          if git diff --cached --quiet; then
+            echo "No new topics to commit"
           else
-            echo "No topic_history.txt found"
+            git commit -m "chore: update topic history memory [skip ci]"
+            git pull --rebase origin main || true
+            git push origin HEAD:main || true
           fi
 
       - name: Assemble Video
