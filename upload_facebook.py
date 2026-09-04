@@ -11,7 +11,7 @@ load_dotenv()
 
 def _post_pinned_comment(video_id, description, access_token, page_id):
     import time
-    website = "https://gleku.com/ielts-zoom"
+    website = "https://ielts-zoom.netlify.app/"
     pinned_message = (
         f"{description}\n\n"
         f"🌐 Learn more at our website: {website}"
